@@ -5,6 +5,7 @@ Use this script to interactively play RWARE
 You can control the interaction with the following keys:
 - Up Arrow keys: move current agent forward
 - Left/ Right Arrow keys: rotate current agent left/ right
+- W/ S: ascend/ descend
 - P/ L: pickup/ drop shelf
 - SPACE: do nothing
 - TAB: change the current agent
@@ -77,6 +78,7 @@ class InteractiveRWAREEnv:
     def _help(self):
         print("Use the up arrow key to move the current agent forward")
         print("Use the left/ right arrow keys to rotate the current agent left/ right")
+        print("Press W to ascend or S to descend")
         print("Press P or L to pickup/ drop shelf")
         print("Use the SPACE key to do nothing")
         print("Press TAB to change the current agent")
@@ -90,7 +92,9 @@ class InteractiveRWAREEnv:
         agent_carrying = self.env.unwrapped.agents[self.current_agent_index].carrying_shelf
         agent_x = self.env.unwrapped.agents[self.current_agent_index].x
         agent_y = self.env.unwrapped.agents[self.current_agent_index].y
-        agent_str = f"Agent {self.current_agent_index + 1} (at row {agent_y + 1}, col {agent_x + 1}"
+        agent_z = self.env.unwrapped.agents[self.current_agent_index].z
+        level = "ground" if agent_z == 0 else "flight"
+        agent_str = f"Agent {self.current_agent_index + 1} (at row {agent_y + 1}, col {agent_x + 1}, level {level}"
         if agent_carrying:
             agent_str += ", carrying shelf)"
         else:
@@ -121,6 +125,10 @@ class InteractiveRWAREEnv:
             self.current_action = Action.RIGHT
         elif k == key.UP:
             self.current_action = Action.FORWARD
+        elif k == key.W:
+            self.current_action = Action.ASCEND
+        elif k == key.S:
+            self.current_action = Action.DESCEND
         elif k == key.P or k == key.L:
             self.current_action = Action.TOGGLE_LOAD
         elif k == key.SPACE:
@@ -164,7 +172,16 @@ class InteractiveRWAREEnv:
             if self.current_action is not None:
                 actions = [Action.NOOP] * self.n_agents
                 actions[self.current_agent_index] = self.current_action
+                selected_agent = self.env.unwrapped.agents[self.current_agent_index]
+                previous_level = selected_agent.z
                 obss, rews, done, trunc, info = self.env.step([act.value for act in actions])
+                if self.current_action in (Action.ASCEND, Action.DESCEND):
+                    if selected_agent.z != previous_level:
+                        print(f"{self._get_current_agent_info()}")
+                    elif self.current_action == Action.ASCEND:
+                        print("Cannot ascend: already at flight level, underneath a container, or blocked by another drone.")
+                    else:
+                        print("Cannot descend: already at ground level, above a container, or blocked by another drone.")
                 self.ep_returns += np.array(rews)
                 self.t += 1
 

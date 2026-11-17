@@ -34,6 +34,8 @@ class Action(Enum):
     LEFT = 2
     RIGHT = 3
     TOGGLE_LOAD = 4
+    ASCEND = 5
+    DESCEND = 6
 
 
 class Direction(Enum):
@@ -86,6 +88,7 @@ class Agent(Entity):
         Agent.counter += 1
         super().__init__(Agent.counter, x, y)
         self.dir = dir_
+        self.z = 0
         self.message = np.zeros(msg_bits)
         self.req_action: Optional[Action] = None
         self.carrying_shelf: Optional[Shelf] = None
@@ -748,11 +751,15 @@ class Warehouse(gym.Env):
 
     def _recalc_grid(self):
         self.grid[:] = 0
+        elevated_shelves = {a.carrying_shelf for a in self.agents if a.z == 1 and a.carrying_shelf}
         for s in self.shelfs:
-            self.grid[_LAYER_SHELFS, s.y, s.x] = s.id
+            if s not in elevated_shelves:
+                self.grid[_LAYER_SHELFS, s.y, s.x] = s.id
 
+        self.agent_grid = np.zeros((2, *self.grid_size), dtype=np.int32)
         for a in self.agents:
-            self.grid[_LAYER_AGENTS, a.y, a.x] = a.id
+            self.agent_grid[a.z, a.y, a.x] = a.id
+        self.grid[_LAYER_AGENTS] = self.agent_grid[0]
 
     def reset(self, seed=None, options=None):
         if seed is not None:
@@ -823,11 +830,22 @@ class Warehouse(gym.Env):
         G = nx.DiGraph()
 
         for agent in self.agents:
-            start = agent.x, agent.y
-            target = agent.req_location(self.grid_size)
+            start = agent.x, agent.y, agent.z
+            target_x, target_y = agent.req_location(self.grid_size)
+            target_z = agent.z
+            if agent.req_action == Action.ASCEND and agent.z == 0:
+                shelf_id = self.grid[_LAYER_SHELFS, agent.y, agent.x]
+                if not shelf_id or (agent.carrying_shelf and shelf_id == agent.carrying_shelf.id):
+                    target_z = 1
+            elif agent.req_action == Action.DESCEND and agent.z == 1:
+                if not self.grid[_LAYER_SHELFS, agent.y, agent.x]:
+                    target_z = 0
+            target = target_x, target_y, target_z
 
             if (
                 agent.carrying_shelf
+                and agent.z == 0
+                and agent.req_action == Action.FORWARD
                 and start != target
                 and self.grid[_LAYER_SHELFS, target[1], target[0]]
                 and not (
@@ -858,13 +876,13 @@ class Warehouse(gym.Env):
                     continue
                 for edge in cycle:
                     start_node = edge[0]
-                    agent_id = self.grid[_LAYER_AGENTS, start_node[1], start_node[0]]
+                    agent_id = self.agent_grid[start_node[2], start_node[1], start_node[0]]
                     if agent_id > 0:
                         commited_agents.add(agent_id)
             except nx.NetworkXNoCycle:
                 longest_path = nx.algorithms.dag_longest_path(comp)
-                for x, y in longest_path:
-                    agent_id = self.grid[_LAYER_AGENTS, y, x]
+                for x, y, z in longest_path:
+                    agent_id = self.agent_grid[z, y, x]
                     if agent_id:
                         commited_agents.add(agent_id)
 
@@ -872,7 +890,7 @@ class Warehouse(gym.Env):
         failed_agents = set(self.agents) - commited_agents
 
         for agent in failed_agents:
-            assert agent.req_action == Action.FORWARD
+            assert agent.req_action in (Action.FORWARD, Action.ASCEND, Action.DESCEND)
             agent.req_action = Action.NOOP
 
         rewards = np.zeros(self.n_agents)
@@ -884,13 +902,20 @@ class Warehouse(gym.Env):
                 agent.x, agent.y = agent.req_location(self.grid_size)
                 if agent.carrying_shelf:
                     agent.carrying_shelf.x, agent.carrying_shelf.y = agent.x, agent.y
+            elif agent.req_action == Action.ASCEND and agent.z == 0:
+                shelf_id = self.grid[_LAYER_SHELFS, agent.y, agent.x]
+                if not shelf_id or (agent.carrying_shelf and shelf_id == agent.carrying_shelf.id):
+                    agent.z = 1
+            elif agent.req_action == Action.DESCEND and agent.z == 1:
+                if not self.grid[_LAYER_SHELFS, agent.y, agent.x]:
+                    agent.z = 0
             elif agent.req_action in [Action.LEFT, Action.RIGHT]:
                 agent.dir = agent.req_direction()
-            elif agent.req_action == Action.TOGGLE_LOAD and not agent.carrying_shelf:
+            elif agent.req_action == Action.TOGGLE_LOAD and agent.z == 0 and not agent.carrying_shelf:
                 shelf_id = self.grid[_LAYER_SHELFS, agent.y, agent.x]
                 if shelf_id:
                     agent.carrying_shelf = self.shelfs[shelf_id - 1]
-            elif agent.req_action == Action.TOGGLE_LOAD and agent.carrying_shelf:
+            elif agent.req_action == Action.TOGGLE_LOAD and agent.z == 0 and agent.carrying_shelf:
                 if not self._is_highway(agent.x, agent.y):
                     agent.carrying_shelf = None
                     if agent.has_delivered and self.reward_type == RewardType.TWO_STAGE:

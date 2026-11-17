@@ -9,7 +9,6 @@ import sys
 
 from gymnasium import error
 import numpy as np
-import six
 
 from rware.warehouse import Direction
 
@@ -74,7 +73,7 @@ def get_display(spec):
     """
     if spec is None:
         return None
-    elif isinstance(spec, six.string_types):
+    elif isinstance(spec, str):
         return pyglet.canvas.Display(spec)
     else:
         raise error.Error(
@@ -92,8 +91,9 @@ class Viewer(object):
         self.grid_size = 30
         self.icon_size = 20
 
-        self.width = 1 + self.cols * (self.grid_size + 1)
-        self.height = 2 + self.rows * (self.grid_size + 1)
+        self.panel_width = 1 + self.cols * (self.grid_size + 1)
+        self.width = 2 * self.panel_width + 20
+        self.height = 26 + self.rows * (self.grid_size + 1)
         self.window = pyglet.window.Window(
             width=self.width, height=self.height, display=display
         )
@@ -124,10 +124,17 @@ class Viewer(object):
         self.window.switch_to()
         self.window.dispatch_events()
 
-        self._draw_grid()
-        self._draw_goals(env)
-        self._draw_shelfs(env)
-        self._draw_agents(env)
+        for level, title in ((0, "Ground"), (1, "Flight")):
+            glPushMatrix()
+            glTranslatef(level * (self.panel_width + 20), 0, 0)
+            self._draw_grid()
+            if level == 0:
+                self._draw_goals(env)
+            self._draw_shelfs(env, level)
+            self._draw_agents(env, level)
+            pyglet.text.Label(title, x=4, y=self.height - 18,
+                              color=(*_BLACK, 255)).draw()
+            glPopMatrix()
 
         if return_rgb_array:
             buffer = pyglet.image.get_buffer_manager().get_color_buffer()
@@ -177,10 +184,13 @@ class Viewer(object):
             )
         batch.draw()
 
-    def _draw_shelfs(self, env):
+    def _draw_shelfs(self, env, level):
         batch = pyglet.graphics.Batch()
 
+        elevated = {a.carrying_shelf for a in env.agents if a.z == 1 and a.carrying_shelf}
         for shelf in env.shelfs:
+            if (shelf in elevated) != (level == 1):
+                continue
             x, y = shelf.x, shelf.y
             y = self.rows - y - 1  # pyglet rendering is reversed
             shelf_color = (
@@ -255,7 +265,7 @@ class Viewer(object):
             )
             label.draw()
 
-    def _draw_agents(self, env):
+    def _draw_agents(self, env, level):
         agents = []
         batch = pyglet.graphics.Batch()
 
@@ -264,6 +274,8 @@ class Viewer(object):
         resolution = 6
 
         for agent in env.agents:
+            if agent.z != level:
+                continue
             col, row = agent.x, agent.y
             row = self.rows - row - 1  # pyglet rendering is reversed
 
@@ -292,6 +304,8 @@ class Viewer(object):
             circle.draw(GL_POLYGON)
 
         for agent in env.agents:
+            if agent.z != level:
+                continue
             col, row = agent.x, agent.y
             row = self.rows - row - 1  # pyglet rendering is reversed
 
