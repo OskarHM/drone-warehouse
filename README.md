@@ -3,6 +3,20 @@
  <p align="center">A multi-agent reinforcement learning environment</p>
 </p>
 
+## Quick testing
+
+From this repository, install the project with `python -m pip install -e .`, then run:
+
+```sh
+python human_play.py --env rware-tiny-2ag-v2 --display_info
+```
+
+Use the arrow keys to move and turn, **W/S** to ascend/descend, **P/L** to load/unload, and **Tab** to switch drones. Carry a green requested container to **G** at ground level; the delivery earns **+10** before action costs. Return it to an empty storage cell to unload. Press **D** to toggle terminal logs and **H** for all controls.
+
+Each drone pays −0.05 per forward attempt, −0.15 per vertical attempt, and −0.01 per turn, wait or load/unload attempt. A blocked forward or vertical move costs an additional −0.20: for example, a blocked forward move returns −0.25. The default individual reward is logged as `Rew` for the selected drone;
+
+For a short centralized-interface check, run `python smoke_test.py`.
+
 [![Maintenance](https://img.shields.io/badge/Maintained%3F-yes-green.svg)](https://GitHub.com/Naereen/StrapDown.js/graphs/commit-activity)
 [![GitHub license](https://img.shields.io/github/license/Naereen/StrapDown.js.svg)](https://github.com/Naereen/StrapDown.js/blob/master/LICENSE)
 
@@ -17,6 +31,7 @@
 <h1>Table of Contents</h1>
 
 - [Environment Description](#environment-description)
+- [Quick testing](#quick-testing)
   - [What does it look like?](#what-does-it-look-like)
   - [Action Space](#action-space)
   - [Observation Space](#observation-space)
@@ -33,13 +48,13 @@
 
 # Environment Description
 
-The multi-robot warehouse (RWARE) environment simulates a warehouse with robots moving and delivering requested goods. The simulator is inspired by real-world applications, in which robots pick-up shelves and deliver them to a workstation. Humans access the content of a shelf, and then robots can return them to empty shelf locations.
+This project adapts the multi-robot warehouse (RWARE) environment for drones operating at ground and flight levels. The existing movable shelves represent containers: drones pick them up, deliver requested containers to a goal, and return them to empty storage locations.
 
 The environment is configurable: it allows for different sizes (difficulty), number of agents, communication capabilities, and reward settings (cooperative/individual). Of course, the parameters used in each experiment must be clearly reported to allow for fair comparisons between algorithms.
 
 ## What does it look like?
 
-Below is an illustration of a small (10x20) warehouse with four trained agents. Agents have been trained with the SEAC algorithm [[2](#please-cite)]. This visualisation can be achieved using the `env.render()` function as described later.
+The following illustration shows the original RWARE environment with four trained agents. The current renderer shows ground and flight levels side by side.
 
 <p align="center">
  <img width="450px" src="docs/img/rware.gif" align="center" alt="Multi-Robot Warehouse (RWARE) illustration" />
@@ -47,20 +62,22 @@ Below is an illustration of a small (10x20) warehouse with four trained agents. 
 
 
 ## Action Space
-In this simulation, robots have the following discrete action space:
+Each drone has seven discrete actions:
 
-A={ Turn Left, Turn Right, Forward, Load/Unload Shelf }
+`A = {Wait, Forward, Turn Left, Turn Right, Load/Unload, Ascend, Descend}`
 
-The first three actions allow each robot only to rotate and move forward. Loading/Unloading only works when an agent is beneath a shelf on one of the predesignated locations.
+Loading and unloading are only possible at ground level; unloading requires an empty storage location. An unloaded drone cannot ascend from beneath a container, and a drone cannot descend onto a stationary container. Drones can fly over containers at flight level.
 
 ## Observation Space
-The observation of an agent is partially observable and consists of a 3x3 (configurable) square centred on the agent. Inside this limited grid, all entities are observable:
+The default per-agent observation is local, covering a configurable square (3×3 by default) centred on the agent. It does not include altitude or fully represent flight-level occupancy:
 - The location, the rotation and whether the agent is carrying a shelf.
 - The location and rotation of other robots.
 - Shelves and whether they are currently in the request queue.
 
+For a centralized global observation that includes altitude and both drones, use `CentralizedWarehouse` from `rware.utils.wrappers`. See [required_changes_to_env.md](required_changes_to_env.md) for the state format and an example.
+
 ## Dynamics: Collisions
-The dynamics of the environment are also of particular interest. Like a real, 3-dimensional warehouse, the robots can move beneath the shelves. Of course, when the robots are loaded, they must use the corridors, avoiding any standing shelves.
+At ground level, unloaded drones can move beneath containers; loaded drones must avoid stationary containers. Drones may share the same horizontal position at different heights, but not the same `(x, y, z)` cell. A two-drone position swap is blocked.
 
 Any collisions are resolved in a way that allows for maximum mobility. When two or more agents attempt to move to the same location, we prioritise the one that also blocks others. Otherwise, the selection is done arbitrarily. The visuals below demonstrate the resolution of various collisions.
 
@@ -69,7 +86,7 @@ Any collisions are resolved in a way that allows for maximum mobility. When two 
 ![](docs/img/collision1.gif)  |  ![](docs/img/collision2.gif)  |  ![](docs/img/collision3.gif)
 
 ## Rewards
-At each time a set number of shelves R is requested. When a requested shelf is brought to a goal location, another shelf is uniformly sampled and added to the current requests. Agents are rewarded for successfully delivering a requested shelf to a goal location, with a reward of 1. A significant challenge in these environments is for agents to deliver requested shelves but also finding an empty location to return the previously delivered shelf. Having multiple steps between deliveries leads a very sparse reward signal.
+At any time, a set number of containers R is requested. A requested container delivered to a goal at ground level earns +10, and another container is sampled for the request queue. Action and blocked-move costs are listed in [Quick testing](#quick-testing). By default the reward is individual; global and two-stage reward modes are also available. In two-stage mode, +5 is awarded on delivery and +5 when the container is returned to storage, before action costs.
 
 # Environment Parameters
 
@@ -85,7 +102,7 @@ Note that R directly affects the difficulty of the environment. A small R, espec
 
 While RWARE allows fine tuning of multiple parameters when using the Warehouse class, it also registers multiple default environments with Gymnasium for simplicity.
 
-The registered names look like `rware-tiny-2ag-v1` and might cryptic in the beginning, but it is not actually complicated. Every name always starts with rware. Next, the map size is appended as -tiny, -small, -medium, or -large. The number of robots in the map is selected as Xag with X being a number larger than one (e.g. -4ag for 4 agents). A difficulty modifier is optionally appended in the form of -easy or -hard, making requested shelves twice or half the number of agents (see section Rewards). Finally -v2 is the version as required for Gymnasium. In the time of writing all environments are v1, but we will increase it during changes or bugfixes.
+Registered names look like `rware-tiny-2ag-v2`. They contain the map size, the number of agents and an optional `-easy` or `-hard` modifier, followed by the Gymnasium version `-v2`.
 
 A few examples:
 ```python
@@ -134,17 +151,12 @@ A detailed explanation of all parameters can be found [here](https://github.com/
 
 # Installation
 
-Assuming you have Python3 (preferably on a virtual environment: venv or Anaconda) installed, you can use PyPI:
+Install this checkout in a Python virtual environment:
 ```sh
-pip install rware
+python -m pip install -e .
 ```
 
-If you prefer to have the code available and be able to edit it, you can use Git to download and install it:
-```sh
-git clone git@github.com:uoe-agents/robotic-warehouse.git
-cd robotic-warehouse
-pip install -e .
-```
+Installing `rware` from PyPI installs the upstream package, not necessarily this drone adaptation.
 
 # Getting Started
 
@@ -167,8 +179,8 @@ The `rware:` in the beginning of the environment name tells Gym to import the re
 
 The number of agents, the observation space, and the action space are accessed using:
 ```python
-env.n_agents  # 2
-env.action_space  # Tuple(Discrete(5), Discrete(5))
+env.unwrapped.n_agents  # 2
+env.action_space  # Tuple(Discrete(7), Discrete(7))
 env.observation_space  # Tuple(Box(XX,), Box(XX,))
 ```
 
@@ -177,15 +189,15 @@ The returned spaces are from the Gym library (`gym.spaces`) Each element of the 
 The reset and step functions again are identical to Gym:
 
 ```python
-obs = env.reset()  # a tuple of observations
+obs, info = env.reset()  # a tuple of observations and an info dictionary
 
 actions = env.action_space.sample()  # the action space can be sampled
 print(actions)  # (1, 0)
-n_obs, reward, done, info = env.step(actions)
-print(done)    # False
-print(reward)  # [0.0, 0.0]
+n_obs, rewards, terminated, truncated, info = env.step(actions)
+print(terminated, truncated)
+print(rewards)  # one reward per agent
 ```
-which leaves as to the only difference with Gym: the rewards and the done flag are lists, and each element corresponds to the respective agent.
+Rewards are per agent; `terminated` and `truncated` are single booleans for the episode. A configured `target_deliveries` ends the task; `max_steps` and the optional inactivity limit truncate it.
 
 Finally, the environment can be rendered for debugging purposes:
 ```python
@@ -211,6 +223,7 @@ python human_play.py --env rware-tiny-2ag-v2
 Within the script, you can control a single agent at the time using the following keys:
 - Up Arrow keys: move current agent forward
 - Left/ Right Arrow keys: rotate current agent left/ right
+- W / S: ascend / descend
 - P/ L: pickup/ drop shelf
 - SPACE: do nothing
 - TAB: change the current agent (rotates through all agents)
