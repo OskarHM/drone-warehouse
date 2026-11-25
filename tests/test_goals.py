@@ -109,7 +109,7 @@ def test_goal_1(env_0: Warehouse):
     assert env_0.agents[0].y == 28
 
     assert env_0.request_queue[0] != env_0.shelfs[0]
-    assert rewards[0] == pytest.approx(1.0)
+    assert rewards[0] == pytest.approx(9.95)
 
 
 def test_goal_2(env_1: Warehouse):
@@ -120,8 +120,8 @@ def test_goal_2(env_1: Warehouse):
     assert env_1.agents[0].y == 28
 
     assert env_1.request_queue[0] != env_1.shelfs[0]
-    assert rewards[0] == pytest.approx(1.0)
-    assert rewards[1] == pytest.approx(1.0)
+    assert rewards[0] == pytest.approx(9.95)
+    assert rewards[1] == pytest.approx(9.99)
 
 
 def test_goal_3(env_2: Warehouse):
@@ -133,24 +133,24 @@ def test_goal_3(env_2: Warehouse):
     assert env.agents[0].y == 28
 
     assert env.request_queue[0] != env.shelfs[0]
-    assert rewards[0] == pytest.approx(1.0)
-    assert rewards[1] == pytest.approx(0.0)
+    assert rewards[0] == pytest.approx(9.95)
+    assert rewards[1] == pytest.approx(-0.01)
 
 
 def test_goal_4(env_0: Warehouse):
     assert env_0.request_queue[0] == env_0.shelfs[0]
 
     _, rewards, _, _, _ = env_0.step([Action.LEFT])
-    assert rewards[0] == pytest.approx(0.0)
+    assert rewards[0] == pytest.approx(-0.01)
     _, rewards, _, _, _ = env_0.step([Action.LEFT])
-    assert rewards[0] == pytest.approx(0.0)
+    assert rewards[0] == pytest.approx(-0.01)
     _, rewards, _, _, _ = env_0.step([Action.FORWARD])
     assert env_0.agents[0].x == 4
     assert env_0.agents[0].y == 26
 
     assert env_0.request_queue[0] == env_0.shelfs[0]
 
-    assert rewards[0] == pytest.approx(0.0)
+    assert rewards[0] == pytest.approx(-0.05)
 
 
 def test_goal_5(env_3: Warehouse):
@@ -162,8 +162,8 @@ def test_goal_5(env_3: Warehouse):
     assert env.agents[0].y == 28
 
     assert env.request_queue[0] != env.shelfs[0]
-    assert rewards[0] == pytest.approx(0.5)
-    assert rewards[1] == pytest.approx(0.0)
+    assert rewards[0] == pytest.approx(4.95)
+    assert rewards[1] == pytest.approx(-0.01)
 
     env.agents[0].x = 1
     env.agents[0].y = 1
@@ -172,13 +172,13 @@ def test_goal_5(env_3: Warehouse):
     env._recalc_grid()
     _, rewards, _, _, _ = env.step([Action.TOGGLE_LOAD, Action.NOOP])
 
-    assert rewards[0] == pytest.approx(0.5)
-    assert rewards[1] == pytest.approx(0.0)
+    assert rewards[0] == pytest.approx(4.99)
+    assert rewards[1] == pytest.approx(-0.01)
     _, rewards, _, _, _ = env.step([Action.TOGGLE_LOAD, Action.NOOP])
 
-    assert rewards[0] == pytest.approx(0.0)
-    assert rewards[1] == pytest.approx(0.0)
+    assert rewards[0] == pytest.approx(-0.01)
+    assert rewards[1] == pytest.approx(-0.01)
     _, rewards, _, _, _ = env.step([Action.TOGGLE_LOAD, Action.NOOP])
 
-    assert rewards[0] == pytest.approx(0.0)
-    assert rewards[1] == pytest.approx(0.0)
+    assert rewards[0] == pytest.approx(-0.01)
+    assert rewards[1] == pytest.approx(-0.01)

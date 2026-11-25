@@ -37,6 +37,7 @@ class CentralizedWarehouse(gym.Wrapper):
 
         self._action_counts = tuple(int(space.n) for space in spaces.spaces)
         self.action_space = gym.spaces.Discrete(math.prod(self._action_counts))
+        self.reward_range = tuple(bound * warehouse.n_agents for bound in warehouse.reward_range)
         self._shelf_count = int(np.count_nonzero(warehouse.highways == 0))
         grid_cells = math.prod(warehouse.grid_size)
         observation_size = 2 * grid_cells + 6 * warehouse.n_agents + 4 * self._shelf_count + 3
@@ -78,9 +79,12 @@ class CentralizedWarehouse(gym.Wrapper):
             raise ValueError(f"Invalid joint action: {action!r}")
         actions = divmod(int(action), self._action_counts[1])
         _, rewards, terminated, truncated, info = self.env.step(actions)
-        # GLOBAL gives every agent the same team reward; summing would double it.
+        # GLOBAL shares each delivery reward, but action costs remain per-agent.
         if self.env.unwrapped.reward_type.name == "GLOBAL":
-            reward = float(rewards[0])
+            if "shared_delivery_reward" in info:
+                reward = float(sum(rewards) - (len(rewards) - 1) * info["shared_delivery_reward"])
+            else:
+                reward = float(rewards[0])
         else:
             reward = float(sum(rewards))
         info = dict(info)

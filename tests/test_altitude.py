@@ -50,7 +50,7 @@ def test_elevated_load_does_not_deliver_or_block_ground(env):
     env.step([Action.ASCEND, Action.NOOP])
     env.agents[0].dir = Direction.DOWN
     _, rewards, _, _, _ = env.step([Action.FORWARD, Action.NOOP])
-    assert rewards == [0, 0]
+    assert rewards == pytest.approx([-0.05, -0.01])
     assert env.request_queue[0] is env.agents[0].carrying_shelf
     env.step([Action.DESCEND, Action.NOOP])
     # Delivery happens on arrival at the goal at ground level.

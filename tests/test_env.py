@@ -34,7 +34,8 @@ def env_0():
 
     env.agents[0].carrying_shelf = env.shelfs[0]
 
-    env.request_queue[0] = env.shelfs[0]
+    other_requests = [shelf for shelf in env.request_queue if shelf is not env.shelfs[0]]
+    env.request_queue = [env.shelfs[0]] + other_requests[: env.request_queue_size - 1]
     env._recalc_grid()
     return env
 
@@ -355,7 +356,7 @@ def test_inactivity_1(env_0):
         _,
         _,
     ) = env.step([Action.FORWARD])
-    assert reward[0] == pytest.approx(1.0)
+    assert reward[0] == pytest.approx(9.95)
     for i in range(9):
         _, _, done, _, _ = env.step([Action.NOOP])
         assert not done

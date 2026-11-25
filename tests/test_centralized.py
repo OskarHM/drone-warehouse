@@ -88,8 +88,8 @@ def test_joint_reward_counts_delivery_once(reward_type):
     base.request_queue = [shelf]
     base._recalc_grid()
     _, reward, _, _, info = env.step(Action.FORWARD.value * 7 + Action.NOOP.value)
-    assert reward == 1.0
-    assert info["agent_rewards"] == ((1.0, 0.0) if reward_type == RewardType.INDIVIDUAL else (1.0, 1.0))
+    assert reward == pytest.approx(9.94)
+    assert info["agent_rewards"] == pytest.approx((9.95, -0.01) if reward_type == RewardType.INDIVIDUAL else (9.95, 9.99))
     env.close()
 
 
@@ -109,7 +109,7 @@ def test_delivery_target_terminates_and_progress_resets():
         other.x, other.y, other.z = 3, 0, 0
         base._recalc_grid()
         state, reward, terminated, truncated, _ = env.step(Action.FORWARD.value * 7)
-        assert reward == 1.0
+        assert reward == pytest.approx(9.94)
         assert state[-1] == expected
         assert terminated == (expected == 2)
         assert not truncated

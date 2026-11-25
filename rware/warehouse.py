@@ -13,6 +13,9 @@ _COLLISION_LAYERS = 2
 _LAYER_AGENTS = 0
 _LAYER_SHELFS = 1
 
+_DELIVERY_REWARD = 10.0
+_BLOCKED_MOVE_COST = 0.20
+
 
 class _VectorWriter:
     def __init__(self, size: int):
@@ -36,6 +39,17 @@ class Action(Enum):
     TOGGLE_LOAD = 4
     ASCEND = 5
     DESCEND = 6
+
+
+_ACTION_COSTS = {
+    Action.NOOP: 0.01,
+    Action.FORWARD: 0.05,
+    Action.LEFT: 0.01,
+    Action.RIGHT: 0.01,
+    Action.TOGGLE_LOAD: 0.01,
+    Action.ASCEND: 0.15,
+    Action.DESCEND: 0.15,
+}
 
 
 class Direction(Enum):
@@ -250,7 +264,10 @@ class Warehouse(gym.Env):
         self.sensor_range = sensor_range
         self.max_inactivity_steps: Optional[int] = max_inactivity_steps
         self.reward_type = reward_type
-        self.reward_range = (0, 1)
+        self.reward_range = (
+            -(max(_ACTION_COSTS.values()) + _BLOCKED_MOVE_COST),
+            _DELIVERY_REWARD * len(self.goals) + _DELIVERY_REWARD / 2,
+        )
 
         self._cur_inactive_steps = None
         self._cur_steps = 0
@@ -830,6 +847,9 @@ class Warehouse(gym.Env):
             else:
                 agent.req_action = Action(action)
 
+        attempted_actions = [agent.req_action for agent in self.agents]
+        initial_positions = [(agent.x, agent.y, agent.z) for agent in self.agents]
+
         # # stationary agents will certainly stay where they are
         # stationary_agents = [agent for agent in self.agents if agent.action != Action.FORWARD]
 
@@ -929,13 +949,14 @@ class Warehouse(gym.Env):
                 if not self._is_highway(agent.x, agent.y):
                     agent.carrying_shelf = None
                     if agent.has_delivered and self.reward_type == RewardType.TWO_STAGE:
-                        rewards[agent.id - 1] += 0.5
+                        rewards[agent.id - 1] += _DELIVERY_REWARD / 2
 
                     agent.has_delivered = False
 
         self._recalc_grid()
 
         shelf_delivered = False
+        deliveries_this_step = 0
         for y, x in self.goals:
             shelf_id = self.grid[_LAYER_SHELFS, x, y]
             if not shelf_id:
@@ -947,20 +968,32 @@ class Warehouse(gym.Env):
             # a shelf was successfully delived.
             shelf_delivered = True
             self.deliveries_completed += 1
+            deliveries_this_step += 1
             # remove from queue and replace it
             candidates = [s for s in self.shelfs if s not in self.request_queue]
             new_request = self.np_random.choice(candidates)
             self.request_queue[self.request_queue.index(shelf)] = new_request
             # also reward the agents
             if self.reward_type == RewardType.GLOBAL:
-                rewards += 1
+                rewards += _DELIVERY_REWARD
             elif self.reward_type == RewardType.INDIVIDUAL:
                 agent_id = self.grid[_LAYER_AGENTS, x, y]
-                rewards[agent_id - 1] += 1
+                rewards[agent_id - 1] += _DELIVERY_REWARD
             elif self.reward_type == RewardType.TWO_STAGE:
                 agent_id = self.grid[_LAYER_AGENTS, x, y]
                 self.agents[agent_id - 1].has_delivered = True
-                rewards[agent_id - 1] += 0.5
+                rewards[agent_id - 1] += _DELIVERY_REWARD / 2
+
+        blocked_moves = []
+        for index, (agent, action, start) in enumerate(
+            zip(self.agents, attempted_actions, initial_positions)
+        ):
+            blocked = (action in (Action.FORWARD, Action.ASCEND, Action.DESCEND)
+                       and (agent.x, agent.y, agent.z) == start)
+            blocked_moves.append(blocked)
+            rewards[index] -= _ACTION_COSTS[action]
+            if blocked:
+                rewards[index] -= _BLOCKED_MOVE_COST
 
         if shelf_delivered:
             self._cur_inactive_steps = 0
@@ -979,6 +1012,11 @@ class Warehouse(gym.Env):
 
         new_obs = tuple([self._make_obs(agent) for agent in self.agents])
         info = self._get_info()
+        info["blocked_moves"] = tuple(blocked_moves)
+        info["shared_delivery_reward"] = (
+            _DELIVERY_REWARD * deliveries_this_step
+            if self.reward_type == RewardType.GLOBAL else 0.0
+        )
         return new_obs, list(rewards), terminated, truncated, info
 
     def render(self):
