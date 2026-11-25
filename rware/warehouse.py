@@ -170,6 +170,7 @@ class Warehouse(gym.Env):
         image_observation_directional: bool = True,
         normalised_coordinates: bool = False,
         render_mode: str = "human",
+        target_deliveries: Optional[int] = None,
     ):
         """The robotic warehouse environment
 
@@ -233,6 +234,8 @@ class Warehouse(gym.Env):
         :param normalised_coordinates: Specifies whether absolute coordinates should be normalised
             with respect to total warehouse size
         :type normalised_coordinates: bool
+        :param target_deliveries: Number of deliveries needed to complete the task;
+            None leaves the delivery objective open-ended.
         """
 
         self.goals: List[Tuple[int, int]] = []
@@ -252,6 +255,12 @@ class Warehouse(gym.Env):
         self._cur_inactive_steps = None
         self._cur_steps = 0
         self.max_steps = max_steps
+        if target_deliveries is not None and (isinstance(target_deliveries, bool) or
+                                              not isinstance(target_deliveries, int) or
+                                              target_deliveries <= 0):
+            raise ValueError("target_deliveries must be a positive integer or None")
+        self.target_deliveries = target_deliveries
+        self.deliveries_completed = 0
 
         self.normalised_coordinates = normalised_coordinates
 
@@ -770,6 +779,7 @@ class Warehouse(gym.Env):
         Agent.counter = 0
         self._cur_inactive_steps = 0
         self._cur_steps = 0
+        self.deliveries_completed = 0
 
         # n_xshelf = (self.grid_size[1] - 1) // 3
         # n_yshelf = (self.grid_size[0] - 2) // 9
@@ -936,6 +946,7 @@ class Warehouse(gym.Env):
                 continue
             # a shelf was successfully delived.
             shelf_delivered = True
+            self.deliveries_completed += 1
             # remove from queue and replace it
             candidates = [s for s in self.shelfs if s not in self.request_queue]
             new_request = self.np_random.choice(candidates)
@@ -957,18 +968,18 @@ class Warehouse(gym.Env):
             self._cur_inactive_steps += 1
         self._cur_steps += 1
 
-        if (
+        terminated = bool(
+            self.target_deliveries is not None
+            and self.deliveries_completed >= self.target_deliveries
+        )
+        truncated = bool((
             self.max_inactivity_steps
             and self._cur_inactive_steps >= self.max_inactivity_steps
-        ) or (self.max_steps and self._cur_steps >= self.max_steps):
-            done = True
-        else:
-            done = False
-        truncated = False
+        ) or (self.max_steps and self._cur_steps >= self.max_steps))
 
         new_obs = tuple([self._make_obs(agent) for agent in self.agents])
         info = self._get_info()
-        return new_obs, list(rewards), done, truncated, info
+        return new_obs, list(rewards), terminated, truncated, info
 
     def render(self):
         if not self.renderer:

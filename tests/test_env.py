@@ -338,8 +338,8 @@ def test_inactivity_0(env_0):
     for i in range(9):
         _, _, done, _, _ = env.step([Action.NOOP])
         assert not done
-    _, _, done, _, _ = env.step([Action.NOOP])
-    assert done
+    _, _, done, truncated, _ = env.step([Action.NOOP])
+    assert not done and truncated
 
 
 def test_inactivity_1(env_0):
@@ -360,8 +360,8 @@ def test_inactivity_1(env_0):
         _, _, done, _, _ = env.step([Action.NOOP])
         assert not done
 
-    _, _, done, _, _ = env.step([Action.NOOP])
-    assert done
+    _, _, done, truncated, _ = env.step([Action.NOOP])
+    assert not done and truncated
 
 
 @pytest.mark.parametrize("time_limit,", [1, 100, 200])
@@ -384,8 +384,8 @@ def test_time_limit(time_limit):
         _, _, done, _, _ = env.step(env.action_space.sample())
         assert not done
 
-    _, _, done, _, _ = env.step(env.action_space.sample())
-    assert done
+    _, _, done, truncated, _ = env.step(env.action_space.sample())
+    assert not done and truncated
 
 
 def test_inactivity_2(env_0):
@@ -393,14 +393,14 @@ def test_inactivity_2(env_0):
     for i in range(9):
         _, _, done, _, _ = env.step([Action.NOOP])
         assert not done
-    _, _, done, _, _ = env.step([Action.NOOP])
-    assert done
+    _, _, done, truncated, _ = env.step([Action.NOOP])
+    assert not done and truncated
     env.reset()
     for i in range(9):
         _, _, done, _, _ = env.step([Action.NOOP])
         assert not done
-    _, _, done, _, _ = env.step([Action.NOOP])
-    assert done
+    _, _, done, truncated, _ = env.step([Action.NOOP])
+    assert not done and truncated
 
 
 def test_fast_obs_0():
